@@ -1,7 +1,5 @@
 # Formula Lab — simulátor řadicí jednotky TUL Racing
 
-Aplikace pro modelování řadicí jednotky ESP32, sekvenční převodovky a práce s CAN záznamy. Vychází z přiloženého firmware, hardwarové dokumentace v1.3 a screenshotů konfigurace letošního ECU a volantu. Původní zdrojové soubory jsou beze změn v `reference/`; jejich kontrolní součty jsou v `reference/manifest.json`.
-
 ## Spuštění přes C++ soubor v repozitáři
 
 Vstupem aplikace je váš soubor **`src/main.cpp`**. Nativní C++17 program spustí místní HTTP server a zpřístupní ovládací panel z `index.html` a modulů `src/`. Pro tuto cestu nepotřebujete Node.js. Výpočty vozu a řadicí jednotky běží v prohlížeči; nejde o firmware pro nahrání do ESP32.
