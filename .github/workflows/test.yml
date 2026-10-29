@@ -1,0 +1,36 @@
+name: Tests
+on: [push, pull_request]
+jobs:
+  native-build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake -S . -B build
+      - run: cmake --build build --config Release
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npx playwright-core install --with-deps chromium
+      - run: npm run test:e2e
+      - name: Browser workflow through native C++ entry point
+        shell: bash
+        run: |
+          c++ -std=c++17 -O2 src/main.cpp -o /tmp/simulator-native
+          /tmp/simulator-native --root "$PWD" --port 3001 > /tmp/simulator-native.log 2>&1 &
+          simulator_native_pid=$!
+          trap 'kill "$simulator_native_pid"' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:3001/health > /dev/null; then break; fi
+            sleep 0.1
+          done
+          SIMULATOR_E2E_URL=http://127.0.0.1:3001 npm run test:e2e
