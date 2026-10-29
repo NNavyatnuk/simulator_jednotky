@@ -19,6 +19,8 @@ jobs:
           node-version-file: .node-version
           cache: npm
       - run: npm ci
+      - run: npm run build:standalone
+      - run: git diff --exit-code -- SPUSTIT.html
       - run: npm test
       - run: npx playwright-core install --with-deps chromium
       - run: npm run test:e2e

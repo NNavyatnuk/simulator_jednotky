@@ -2,6 +2,27 @@
 
 Česká webová aplikace pro modelování řadicí jednotky ESP32, sekvenční převodovky a práce s CAN záznamy. Vychází z přiloženého firmware, hardwarové dokumentace v1.3 a screenshotů konfigurace letošního ECU a volantu. Původní zdrojové soubory jsou beze změn v `reference/`; jejich kontrolní součty jsou v `reference/manifest.json`.
 
+## Nejrychlejší test ve Windows
+
+**Pro samotnou simulaci otevřete `SPUSTIT.html` dvojklikem v Chrome nebo Edge.** Tento soubor je přímo v repozitáři a obsahuje celou aplikaci. Nevyžaduje překladač C++, Node.js, server ani internet.
+
+1. Aktualizujte projekt z větve `codex/tul-shifting-simulator`. Pokud nepoužíváte Git, otevřete tuto větev na GitHubu a vyberte zelené **Code → Download ZIP**; ZIP nejprve rozbalte.
+2. V Průzkumníku Windows najděte `SPUSTIT.html` a otevřete jej dvojklikem. Ve VS Code můžete na soubor kliknout pravým tlačítkem a zvolit **Reveal in File Explorer / Zobrazit v Průzkumníku souborů**. Samotné kliknutí na HTML ve VS Code otevře jeho zdroj, nikoli běžící aplikaci.
+3. V prohlížeči klikněte na **Nastartovat**, pádlem **+** zařaďte jedničku, posuňte spojku na **0 %** a přidejte plyn.
+
+Pro USB jednotku použijte místní server podle následující části; dostupnost Web Serial při otevření souboru závisí na nastavení prohlížeče. C++ chyby IntelliSense nebrání spuštění samostatného HTML. Při úpravě zdrojů vývojář obnoví tento soubor příkazem `npm run build:standalone`; automatické testy kontrolují jeho aktuálnost.
+
+## Chyby C++ ve VS Code: nenalezené hlavičky
+
+Pokud VS Code hlásí současně chybějící `winsock2.h`, `windows.h`, `iostream`, `algorithm` a další standardní hlavičky, nemá dostupný správně nastavený C++ překladač a Windows SDK. Rozšíření C/C++ ve VS Code není samo o sobě překladač; nepřidávejte jednotlivé systémové cesty odhadem.
+
+Pro práci s nativním C++ programem:
+
+1. Nainstalujte oficiální [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/). Ve Visual Studio Installeru vyberte **Desktop development with C++ / Vývoj desktopových aplikací v C++**, včetně **MSVC pro x64/x86**, **Windows SDK** a **C++ CMake tools for Windows**.
+2. Po instalaci zavřete všechna okna VS Code. Z nabídky Start otevřete **Developer PowerShell for Visual Studio**, přejděte do složky projektu a spusťte `code .`.
+3. Ve VS Code použijte doporučená rozšíření **C/C++** a **CMake Tools**. Přes `Ctrl+Shift+P` zvolte **CMake: Configure** a MSVC / Visual Studio pro x64. Případně použijte **C/C++: Select IntelliSense Configuration** a vyberte nalezený `cl.exe`.
+4. Projekt sestavte a spusťte podle níže uvedených příkazů. Pokud samotný příkaz `cmake` nebo `cl` není dostupný, vraťte se k instalaci nástrojů a ověřte, že používáte Developer PowerShell.
+
 ## Spuštění přes C++ soubor v repozitáři
 
 Vstupem aplikace je váš soubor **`src/main.cpp`**. Nativní C++17 program spustí místní HTTP server a zpřístupní ovládací panel z `index.html` a modulů `src/`. Pro tuto cestu nepotřebujete Node.js. Výpočty vozu a řadicí jednotky běží v prohlížeči; nejde o firmware pro nahrání do ESP32.
