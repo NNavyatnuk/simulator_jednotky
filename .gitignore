@@ -1,0 +1,9 @@
+node_modules/
+*.log
+artifacts/
+build/
+simulator_jednotky
+simulator_jednotky.exe
+.env
+.env.*
+!.env.example

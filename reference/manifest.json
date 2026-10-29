@@ -1,0 +1,67 @@
+{
+  "description": "Unmodified text files from user-supplied shifting-unit-firmware-main.zip. Reference only; not flashed or executed.",
+  "files": [
+    {
+      "file": "reference/firmware/src/shifting.cpp",
+      "sha256": "0da7921f40f48ee908a0e467db66240e0a698a4321447c743b350add5381edd5",
+      "source": "shifting-unit-firmware-main/src/shifting.cpp"
+    },
+    {
+      "file": "reference/firmware/src/main.cpp",
+      "sha256": "cec008e6e605c6be38d81df9f3b014286cc910a91d4fc10e2b0c81da820116fd",
+      "source": "shifting-unit-firmware-main/src/main.cpp"
+    },
+    {
+      "file": "reference/firmware/src/twai.cpp",
+      "sha256": "5ee5764a6083aba0a5bdb648dd98971caffa02eeb007ca828ca4b319b5a241cf",
+      "source": "shifting-unit-firmware-main/src/twai.cpp"
+    },
+    {
+      "file": "reference/firmware/include/shifting.h",
+      "sha256": "71e8ba1af3813072ca54e85aa92af5ccaa875fe6921dc0bdb1875730385801cb",
+      "source": "shifting-unit-firmware-main/include/shifting.h"
+    },
+    {
+      "file": "reference/firmware/include/twai.h",
+      "sha256": "ad1e2b8c88183a574a42eb421b0837e774c7cee3ec3b6446131802d1ff67f099",
+      "source": "shifting-unit-firmware-main/include/twai.h"
+    },
+    {
+      "file": "reference/firmware/platformio.ini",
+      "sha256": "039da5b5953fa5f99d3c9f5f7f3faaa5a9049b6fb3e1f4a0d68b95c981abbf15",
+      "source": "shifting-unit-firmware-main/platformio.ini"
+    },
+    {
+      "file": "reference/can-selftest/src/main.cpp",
+      "sha256": "9d2a56ca5d8fa82f76d990f3effc2dacc893a22b20074939360a4a3642e44c5f",
+      "source": "shifting-unit-can-selftest/src/main.cpp"
+    },
+    {
+      "file": "reference/can-selftest/README_UA.md",
+      "sha256": "99895101ddd7b6c64d72ab92abc6160f233a47c8893e98e9486b4f491c6dfb87",
+      "source": "shifting-unit-can-selftest/README_UA.md"
+    },
+    {
+      "file": "reference/can-selftest/platformio.ini",
+      "sha256": "85d9f9d25eb900cddbfbc0383e050de86000f18ca2300e32b295a6fb77579aeb",
+      "source": "shifting-unit-can-selftest/platformio.ini"
+    }
+  ],
+  "attachments": [
+    {
+      "fileName": "Documentation Shifting Unit v1.3 (4).pdf",
+      "sha256": "3dddfd0bbd2331dc41064467b23ce7d5306626edada5a85f3e5960997ae274e4",
+      "sizeBytes": 2843383
+    },
+    {
+      "fileName": "Datasheety.zip",
+      "sha256": "1f4c2df8abfedf01032418c787b596b28394ff2b4b4cf468954b5ccf53ce19b0",
+      "sizeBytes": 7736415
+    },
+    {
+      "fileName": "shifting-unit-firmware-main.zip",
+      "sha256": "586cb81833cdda98d97a74f759e687583ef49739eaa6b54ab217eb640dc380f1",
+      "sizeBytes": 5443448
+    }
+  ]
+}
