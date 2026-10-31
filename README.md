@@ -14,7 +14,7 @@ ctest --preset windows-release
 ./build/windows-vs2022/Release/simulator_jednotky.exe
 ```
 
-Řešení `build/windows-vs2022/simulator_jednotky.sln` lze otevřít ve Visual Studiu. Pro balíček s Qt DLL a pluginy použijte `cmake --install build/windows-vs2022 --config Release --prefix build/windows-package`. Podrobný postup, licence, ovládání, USB ovladače a testy: **[docs/windows-desktop.md](docs/windows-desktop.md)**.
+Řešení `build/windows-vs2022/simulator_jednotky.sln` lze otevřít ve Visual Studiu. Pro balíček s Qt DLL a pluginy použijte v PowerShellu `cmake --install build/windows-vs2022 --config Release --prefix "$PWD/build/windows-package"` (Qt potřebuje absolutní prefix). Aplikace bude v `build/windows-package/bin/simulator_jednotky.exe`; přenášejte celou složku balíčku. Podrobný postup, licence, ovládání, USB ovladače a testy: **[docs/windows-desktop.md](docs/windows-desktop.md)**.
 
 USB debug port se otevírá nativně na **115200 baud / 8N1, pouze čtení**. Záznam není bezeztrátový CAN capture: DLC je odvozené a skutečný CAN timestamp chybí. Aplikace nic neflashuje a neovládá skutečné ventily.
 

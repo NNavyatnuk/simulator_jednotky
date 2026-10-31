@@ -27,7 +27,19 @@ jobs:
         run: ctest --preset windows-release
       - name: Package Windows desktop with Qt runtime
         if: runner.os == 'Windows'
-        run: cmake --install build/windows-vs2022 --config Release --prefix build/windows-package
+        # Qt requires an absolute prefix when generating the installed qt.conf.
+        run: cmake --install build/windows-vs2022 --config Release --prefix "${{ github.workspace }}/build/windows-package"
+      - name: Smoke test packaged Windows app without development Qt
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Test the shipped DLLs/plugins, not the Qt installation on the runner.
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+          Remove-Item Env:QT_PLUGIN_PATH -ErrorAction SilentlyContinue
+          Remove-Item Env:QT_QPA_PLATFORM_PLUGIN_PATH -ErrorAction SilentlyContinue
+          $env:QT_QPA_PLATFORM = 'windows'
+          & './build/windows-package/bin/simulator_jednotky.exe' --smoke-test
+          if ($LASTEXITCODE -ne 0) { throw "Packaged app startup failed: $LASTEXITCODE" }
       - name: Configure Linux desktop
         if: runner.os == 'Linux'
         run: cmake -S . -B build/desktop -DCMAKE_BUILD_TYPE=Release

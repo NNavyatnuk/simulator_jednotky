@@ -3,6 +3,7 @@ project(simulator_jednotky VERSION 0.2.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+include(GNUInstallDirs)
 
 option(SIMULATOR_BUILD_DESKTOP "Build the native Qt Widgets application" ON)
 option(SIMULATOR_BUILD_WEB_SERVER "Build the legacy HTTP server (not a desktop GUI)" OFF)
@@ -39,7 +40,9 @@ if(SIMULATOR_BUILD_DESKTOP)
     # Embedded JS uses a bounded 512 KB stack; leave room for Qt and C++ calls.
     target_link_options(simulator_jednotky PRIVATE /STACK:8388608)
   endif()
-  install(TARGETS simulator_jednotky RUNTIME DESTINATION .)
+  # Keep the executable beside deployed Qt DLLs and qt.conf. Qt's deployment
+  # API derives this location from CMAKE_INSTALL_BINDIR (bin by default).
+  install(TARGETS simulator_jednotky RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
   qt_generate_deploy_app_script(TARGET simulator_jednotky OUTPUT_SCRIPT deploy_script NO_UNSUPPORTED_PLATFORM_ERROR)
   install(SCRIPT ${deploy_script})
   install(FILES ${quickjs_SOURCE_DIR}/LICENSE DESTINATION licenses RENAME QuickJS-ng-LICENSE)
@@ -52,7 +55,8 @@ if(SIMULATOR_BUILD_DESKTOP)
       target_link_options(desktop_tests PRIVATE /STACK:8388608)
     endif()
     add_test(NAME desktop COMMAND desktop_tests)
-    set_tests_properties(desktop PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    add_test(NAME desktop_startup COMMAND simulator_jednotky --smoke-test)
+    set_tests_properties(desktop desktop_startup PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
   endif()
 endif()
 

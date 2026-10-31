@@ -22,11 +22,13 @@ Výchozí aplikace má vlastní Qt Widgets okno, nativní dialogy a COM port. Ne
 Přenositelnou složku připravíte:
 
 ```powershell
-cmake --install build/windows-vs2022 --config Release --prefix build/windows-package
-.\build\windows-package\simulator_jednotky.exe
+cmake --install build/windows-vs2022 --config Release --prefix "$PWD/build/windows-package"
+.\build\windows-package\bin\simulator_jednotky.exe
 ```
 
-Qt deployment přibalí Qt DLL a plugin `qwindows.dll`. Na cílovém PC může být potřeba Microsoft Visual C++ Redistributable 2015–2022 x64. Není nutné kopírovat checkout, JS soubory ani Node.js. Při distribuci dodržte licenci své instalace Qt (LGPLv3 nebo komerční); MIT licence QuickJS-ng se instaluje do `licenses/`.
+Instalační prefix musí být absolutní (proto `$PWD` v příkazu). Qt deployment přibalí Qt DLL do `bin/`, platformní plugin `qwindows.dll` do `plugins/platforms/` a konfiguraci `bin/qt.conf`. Přenášejte celou složku `windows-package`. Na cílovém PC může být potřeba Microsoft Visual C++ Redistributable 2015–2022 x64. Není nutné kopírovat checkout, JS soubory ani Node.js. Při distribuci dodržte licenci své instalace Qt (LGPLv3 nebo komerční); MIT licence QuickJS-ng se instaluje do `licenses/`.
+
+`simulator_jednotky.exe --smoke-test` ověří inicializaci nativního UI, vestavěných modulů, start motoru a generování virtuálních rámců a skončí s návratovým kódem 0 při úspěchu. CI tím ověřuje také nainstalovaný balíček bez vývojového Qt v `PATH`.
 
 ## Simulace a záznamy
 

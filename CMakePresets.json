@@ -21,6 +21,6 @@
     { "name": "windows-release", "configurePreset": "windows-vs2022", "configuration": "Release", "targets": ["simulator_jednotky", "desktop_tests"], "jobs": 2 }
   ],
   "testPresets": [
-    { "name": "windows-release", "configurePreset": "windows-vs2022", "configuration": "Release", "filter": { "include": { "name": "^desktop$" } }, "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } }
+    { "name": "windows-release", "configurePreset": "windows-vs2022", "configuration": "Release", "filter": { "include": { "name": "^desktop(_startup)?$" } }, "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } }
   ]
 }
