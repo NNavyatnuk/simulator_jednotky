@@ -1,15 +1,47 @@
 name: Tests
 on: [push, pull_request]
 jobs:
-  native-build:
+  desktop:
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-24.04, windows-2022]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - run: cmake -S . -B build
-      - run: cmake --build build --config Release
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          arch: ${{ runner.os == 'Windows' && 'win64_msvc2022_64' || 'linux_gcc_64' }}
+          modules: 'qtserialport'
+          cache: true
+      - name: Configure Windows desktop (VS 2022)
+        if: runner.os == 'Windows'
+        env:
+          QTDIR: ${{ env.QT_ROOT_DIR }}
+        run: cmake --preset windows-vs2022
+      - name: Build Windows desktop and tests
+        if: runner.os == 'Windows'
+        run: cmake --build --preset windows-release
+      - name: Test Windows desktop
+        if: runner.os == 'Windows'
+        run: ctest --preset windows-release
+      - name: Package Windows desktop with Qt runtime
+        if: runner.os == 'Windows'
+        run: cmake --install build/windows-vs2022 --config Release --prefix build/windows-package
+      - name: Configure Linux desktop
+        if: runner.os == 'Linux'
+        run: cmake -S . -B build/desktop -DCMAKE_BUILD_TYPE=Release
+      - name: Build Linux desktop and tests
+        if: runner.os == 'Linux'
+        run: cmake --build build/desktop --target simulator_jednotky desktop_tests --parallel 2
+      - name: Test Linux desktop, including actual serial pseudoterminal
+        if: runner.os == 'Linux'
+        run: ctest --test-dir build/desktop --output-on-failure --no-tests=error
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: Formula-Lab-Windows-x64
+          path: build/windows-package/
   test:
     runs-on: ubuntu-latest
     steps:

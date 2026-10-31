@@ -1,0 +1,26 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 28, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "windows-vs2022",
+      "displayName": "Windows 11 / Visual Studio 2022 x64 / Qt 6.8",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/windows-vs2022",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "$env{QTDIR}",
+        "SIMULATOR_BUILD_DESKTOP": "ON",
+        "SIMULATOR_BUILD_WEB_SERVER": "OFF",
+        "BUILD_TESTING": "ON"
+      },
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "windows-release", "configurePreset": "windows-vs2022", "configuration": "Release", "targets": ["simulator_jednotky", "desktop_tests"], "jobs": 2 }
+  ],
+  "testPresets": [
+    { "name": "windows-release", "configurePreset": "windows-vs2022", "configuration": "Release", "filter": { "include": { "name": "^desktop$" } }, "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } }
+  ]
+}
