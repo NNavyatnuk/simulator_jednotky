@@ -43,7 +43,14 @@ jobs:
           $stdout = Join-Path $env:RUNNER_TEMP 'simulator-startup-stdout.txt'
           # This is a GUI-subsystem executable: explicitly wait for its process
           # and use that process's exit code rather than shell LASTEXITCODE.
-          $app = Start-Process -FilePath './build/windows-package/bin/simulator_jednotky.exe' -ArgumentList '--smoke-test' -PassThru -Wait -RedirectStandardError $stderr -RedirectStandardOutput $stdout
+          $app = Start-Process -FilePath './build/windows-package/bin/simulator_jednotky.exe' -ArgumentList '--smoke-test' -PassThru -RedirectStandardError $stderr -RedirectStandardOutput $stdout
+          if (-not $app.WaitForExit(30000)) {
+            Stop-Process -Id $app.Id -Force
+            Get-Content $stdout, $stderr
+            Write-Output '::error title=Packaged application startup::Process did not exit within 30 seconds.'
+            exit 1
+          }
+          $app.Refresh()
           Get-Content $stdout, $stderr
           if ($app.ExitCode -ne 0) {
             $details = ((Get-Content $stderr -Tail 15) -join ' ') -replace '[\r\n]', ' '
