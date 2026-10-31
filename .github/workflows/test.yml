@@ -38,8 +38,19 @@ jobs:
           Remove-Item Env:QT_PLUGIN_PATH -ErrorAction SilentlyContinue
           Remove-Item Env:QT_QPA_PLATFORM_PLUGIN_PATH -ErrorAction SilentlyContinue
           $env:QT_QPA_PLATFORM = 'windows'
-          & './build/windows-package/bin/simulator_jednotky.exe' --smoke-test
-          if ($LASTEXITCODE -ne 0) { throw "Packaged app startup failed: $LASTEXITCODE" }
+          $env:QT_FORCE_STDERR_LOGGING = '1'
+          $stderr = Join-Path $env:RUNNER_TEMP 'simulator-startup-stderr.txt'
+          $stdout = Join-Path $env:RUNNER_TEMP 'simulator-startup-stdout.txt'
+          # This is a GUI-subsystem executable: explicitly wait for its process
+          # and use that process's exit code rather than shell LASTEXITCODE.
+          $app = Start-Process -FilePath './build/windows-package/bin/simulator_jednotky.exe' -ArgumentList '--smoke-test' -PassThru -Wait -RedirectStandardError $stderr -RedirectStandardOutput $stdout
+          Get-Content $stdout, $stderr
+          if ($app.ExitCode -ne 0) {
+            $details = ((Get-Content $stderr -Tail 15) -join ' ') -replace '[\r\n]', ' '
+            Write-Output "::error title=Packaged application startup::Exit code $($app.ExitCode). $details"
+            Get-ChildItem './build/windows-package' -Recurse -File | Select-Object FullName
+            exit 1
+          }
       - name: Configure Linux desktop
         if: runner.os == 'Linux'
         run: cmake -S . -B build/desktop -DCMAKE_BUILD_TYPE=Release
