@@ -1,35 +1,24 @@
 # Formula Lab — simulátor řadicí jednotky TUL Racing
 
-## Spuštění přes C++ soubor v repozitáři
+## Nativní desktop pro Windows 11 / Visual Studio 2022
 
-Vstupem aplikace je váš soubor **`src/main.cpp`**. Nativní C++17 program spustí místní HTTP server a zpřístupní ovládací panel z `index.html` a modulů `src/`. Pro tuto cestu nepotřebujete Node.js. Výpočty vozu a řadicí jednotky běží v prohlížeči; nejde o firmware pro nahrání do ESP32.
+Výchozí CMake cíl **`simulator_jednotky`** je skutečná grafická aplikace C++17 / Qt Widgets s vlastním oknem, ovládáním vozu, grafem telemetrie, CAN monitorem a výběrem USB/COM portu. Nepoužívá prohlížeč, WebView, Node.js ani HTTP server. Výpočty a dekodéry běží uvnitř procesu v QuickJS-ng; jejich moduly jsou vložené do binárky.
 
-Máte-li CMake a C++ překladač (Visual Studio, GCC nebo Clang):
+Nainstalujte Visual Studio 2022 **17.10+** s C++ desktop workloadem, CMake **3.28+** a Qt **6.8.x MSVC 2022 64-bit** včetně **Qt Serial Port**. Nastavte `QTDIR` na složku Qt (například `C:/Qt/6.8.3/msvc2022_64`) a v PowerShellu:
 
-```sh
-cmake -S . -B build
-cmake --build build --config Release
+```powershell
+cmake --preset windows-vs2022
+cmake --build --preset windows-release
+$env:PATH = "$env:QTDIR/bin;$env:PATH"
+ctest --preset windows-release
+./build/windows-vs2022/Release/simulator_jednotky.exe
 ```
 
-Na Windows spusťte `build\\Release\\simulator_jednotky.exe` (Visual Studio), případně `build\\simulator_jednotky.exe` (MinGW/Ninja). Na Linuxu použijte `./build/simulator_jednotky`. Program vypíše adresu místního panelu; zadejte ji v Chrome nebo Edge na stejném počítači. Okno programu ponechte spuštěné; ukončíte jej pomocí Ctrl+C.
+Řešení `build/windows-vs2022/simulator_jednotky.sln` lze otevřít ve Visual Studiu. Pro balíček s Qt DLL a pluginy použijte v PowerShellu `cmake --install build/windows-vs2022 --config Release --prefix "$PWD/build/windows-package"` (Qt potřebuje absolutní prefix). Aplikace bude v `build/windows-package/bin/simulator_jednotky.exe`; přenášejte celou složku balíčku. Podrobný postup, licence, ovládání, USB ovladače a testy: **[docs/windows-desktop.md](docs/windows-desktop.md)**.
 
-Bez CMake stačí GCC / MinGW:
+USB debug port se otevírá nativně na **115200 baud / 8N1, pouze čtení**. Záznam není bezeztrátový CAN capture: DLC je odvozené a skutečný CAN timestamp chybí. Aplikace nic neflashuje a neovládá skutečné ventily.
 
-```sh
-# Linux
-c++ -std=c++17 -O2 src/main.cpp -o simulator_jednotky
-./simulator_jednotky
-```
-
-```bat
-REM Windows s MinGW
-g++ -std=c++17 -O2 src/main.cpp -o simulator_jednotky.exe -lws2_32
-simulator_jednotky.exe
-```
-
-Program se váže pouze na `127.0.0.1`, výchozí port je 3000. `--port 3001` změní port, `--root cesta` určí složku s `index.html` a `src/`; `--help` vypíše nápovědu. Nespouštějte jej jako PlatformIO firmware. Při kopírování aplikace na jiný počítač ponechte spolu program, `index.html` a adresář `src/`.
-
-## Alternativní spuštění přes Node.js
+## Volitelná původní webová varianta
 
 Vyžaduje Node.js 24+ (testovaná verze v `.node-version`).
 
@@ -39,6 +28,10 @@ npm start
 ```
 
 Server používá port 3000. Volitelné proměnné `PORT` a `HOST` mění adresu naslouchání. `/health` vrací stav aplikace. `npm run dev` restartuje server při změně souborů; změny klienta načtěte obnovením stránky. Aplikace nemá build krok, databázi ani runtime závislosti. Výpočty i záznamy běží v prohlížeči.
+
+Starší `src/main.cpp` zůstává HTTP serverem pro kompatibilitu a testy. Sestavíte jej odděleně pomocí `cmake -S . -B build/http -DSIMULATOR_BUILD_DESKTOP=OFF -DSIMULATOR_BUILD_WEB_SERVER=ON` a `cmake --build build/http --config Release`; cíl se jmenuje `simulator_http`.
+
+Následující popis protokolů platí pro obě rozhraní. Pokyny pro Chrome a Web Serial se týkají pouze webové varianty; desktop používá nativní výběr COM portu a editor kalibrace popsaný v desktopovém návodu.
 
 ## Co je doloženo a co zůstává modelem
 

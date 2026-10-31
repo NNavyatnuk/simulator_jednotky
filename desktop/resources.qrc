@@ -1,0 +1,8 @@
+<RCC><qresource prefix="/">
+  <file alias="desktop/controller.js">controller.js</file>
+  <file alias="src/simulator.js">../src/simulator.js</file>
+  <file alias="src/shifting-unit.js">../src/shifting-unit.js</file>
+  <file alias="src/tul-protocol.js">../src/tul-protocol.js</file>
+  <file alias="src/tul-serial.js">../src/tul-serial.js</file>
+  <file alias="src/can.js">../src/can.js</file>
+</qresource></RCC>
