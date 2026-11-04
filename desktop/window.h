@@ -33,6 +33,7 @@ private:
     QElapsedTimer elapsed_;
     QTimer timer_;
     QLabel *rpm_, *speed_, *gear_, *coolant_, *unit_, *message_, *connection_, *count_, *profile_;
+    QLabel *mosfetStatus_, *mosfetSource_, *mosfetSamples_;
     QProgressBar* rpmBar_;
     QMap<QString, QSlider*> pedals_;
     QMap<QString, QLabel*> pedalValues_;
@@ -43,7 +44,9 @@ private:
     QCheckBox* between_;
     QLineEdit* filter_;
     QTableWidget* log_;
+    QTableWidget* mosfetChannels_;
     QPlainTextEdit* raw_;
+    QPlainTextEdit* mosfetIssues_;
     Telemetry* chart_;
     void render();
     void refreshPorts();

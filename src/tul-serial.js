@@ -10,7 +10,12 @@ export class TulSerialParser {
     this._buffer = '';
     this._discardLine = false;
     this._record = null;
+    this._activity = 0;
   }
+
+  // Completed CAN/debug lines advance this counter; independent MOSFET
+  // heartbeats must not keep a short CAN reconstruction pending forever.
+  get activity() { return this._activity; }
 
   push(text) {
     if (typeof text !== 'string') throw new TypeError('Sériový výpis musí být text.');
@@ -39,7 +44,12 @@ export class TulSerialParser {
    */
   flush({ includePartial = true, reason = 'flush' } = {}) {
     const frames = [];
-    if (!includePartial && (this._buffer || this._discardLine)) return frames;
+    if (!includePartial && (this._buffer || this._discardLine)) {
+      // Keep the entire telemetry tail for the next read, while allowing the
+      // already-complete CAN data to finish at its own idle deadline.
+      if (!this._discardLine && this._buffer.startsWith('MOSFET')) this._finish(frames, reason);
+      return frames;
+    }
     if (includePartial && this._buffer && !this._discardLine) this._line(this._buffer, frames);
     this._buffer = '';
     this._discardLine = false;
@@ -66,6 +76,8 @@ export class TulSerialParser {
   _line(rawLine, frames) {
     const line = rawLine.trim();
     if (!line) return;
+    if (line.startsWith('MOSFET')) return;
+    this._activity++;
     if (line === 'Message received') {
       this._finish(frames, 'next-frame');
       this._record = this._fresh();
@@ -130,14 +142,15 @@ export class TulSerialMonitor {
   get connected() { return Boolean(this._session?.connected); }
   get connecting() { return this._connecting; }
 
-  async connect({ onFrame, onStatus = () => {} }) {
+  async connect({ onFrame, onStatus = () => {}, onText = () => {}, onDisconnect = () => {} }) {
     if (this._session || this._connecting || this._disconnectTask) throw new Error('Jednotka se připojuje, je připojená nebo se právě odpojuje.');
     if (!this.serial) throw new Error('Web Serial není dostupný. Použijte Chrome/Edge a HTTPS nebo localhost.');
     if (typeof onFrame !== 'function') throw new TypeError('Chybí obsluha přijatých rámců.');
+    if (typeof onText !== 'function' || typeof onDisconnect !== 'function') throw new TypeError('Neplatná obsluha USB telemetrie.');
     const session = {
       port: null, reader: null, readTask: null, openTask: null, cleanup: null,
       readEnded: false, closing: false, connected: false, everConnected: false,
-      parser: new TulSerialParser(), idleTimer: null, onFrame, onStatus,
+      parser: new TulSerialParser(), idleTimer: null, onFrame, onStatus, onText, onDisconnect,
     };
     this._session = session;
     this._connecting = true;
@@ -168,9 +181,11 @@ export class TulSerialMonitor {
     for (const frame of frames) session.onFrame({ ...frame, timestamp: Date.now() / 1000 });
   }
 
-  _armIdle(session) {
+  _armIdle(session, restart = true) {
+    if (!restart && session.idleTimer !== null) return;
     clearTimeout(session.idleTimer);
     session.idleTimer = setTimeout(() => {
+      session.idleTimer = null;
       if (!session.closing && !session.readEnded) {
         this._emit(session, session.parser.flush({ includePartial: false, reason: 'idle' }));
       }
@@ -183,11 +198,16 @@ export class TulSerialMonitor {
       while (!session.closing) {
         const { done, value } = await session.reader.read();
         if (done) break;
-        this._emit(session, session.parser.push(decoder.decode(value, { stream: true })));
-        this._armIdle(session);
+        const text = decoder.decode(value, { stream: true });
+        session.onText(text);
+        const activity = session.parser.activity;
+        this._emit(session, session.parser.push(text));
+        this._armIdle(session, session.parser.activity !== activity);
       }
       if (!session.closing) {
-        this._emit(session, session.parser.push(decoder.decode()));
+        const text = decoder.decode();
+        if (text) session.onText(text);
+        this._emit(session, session.parser.push(text));
         this._emit(session, session.parser.flush({ reason: 'eof' }));
       }
     } catch (error) {
@@ -223,6 +243,7 @@ export class TulSerialMonitor {
       } finally {
         if (this._session === session) this._session = null;
         if (this._disconnectTask === task) this._disconnectTask = null;
+        session.onDisconnect();
         if (session.everConnected) session.onStatus('Jednotka odpojena. Připojte ji znovu.');
       }
     });

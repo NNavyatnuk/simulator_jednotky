@@ -2,6 +2,7 @@
 // and UART parser below are the same modules exercised by the browser tests.
 import { VehicleSimulator } from '../src/simulator.js';
 import { ShiftingUnit } from '../src/shifting-unit.js';
+import { MosfetMonitor } from '../src/mosfet-diagnostics.js';
 import { TulSerialParser } from '../src/tul-serial.js';
 import { validateProfile, encodeFrame, decodeFrame, formatCandump, parseCandump, parseSlcanLine } from '../src/can.js';
 import { TUL_CAN_PROFILE, TUL_PROTOCOL_FACTS, makeTulRequest, makeTulGear, makeTulRpm, decodeTulFrame } from '../src/tul-protocol.js';
@@ -17,6 +18,8 @@ export class DesktopController {
     this.paused = false;
     this.capturePaused = false;
     this.uart = new TulSerialParser();
+    this.lastCanActivityMs = null;
+    this.mosfet = new MosfetMonitor();
     this.reset();
   }
 
@@ -137,7 +140,20 @@ export class DesktopController {
       assumptions: ['Model vozu není kalibrován.', 'Kódy 1/2/0x40 a maska 0x43 vyžadují ověření.', 'Virtuální sběrnice 50 ms a ideální pneumatika jsou model.'] };
   }
 
-  serial(text) { for (const f of this.uart.push(text)) this.record({ ...f, timestampOrigin: 'receipt-time' }, 'uart'); }
+  serial(text) {
+    // Output telemetry is live data even while simulation/capture is paused.
+    // CAN reception and simulated FET states never enter this monitor.
+    this.mosfet.push(text);
+    const activity = this.uart.activity;
+    for (const f of this.uart.push(text)) this.record({ ...f, timestampOrigin: 'receipt-time' }, 'uart');
+    const now = Date.now();
+    if (this.uart.activity !== activity) this.lastCanActivityMs = now;
+    else if (this.lastCanActivityMs !== null && now - this.lastCanActivityMs >= 150) {
+      // Periodic MOSFET heartbeats must not keep an isolated short CAN record
+      // pending forever. The parser still refuses to flush partial lines.
+      this.flushSerial();
+    }
+  }
   flushSerial(reason = 'idle') {
     for (const f of this.uart.flush({ includePartial: false, reason })) this.record({ ...f, timestampOrigin: 'receipt-time' }, 'uart');
   }
@@ -171,7 +187,7 @@ export class DesktopController {
       catch (e) { decoded = { chyba: e.message }; }
       return { ...f, decoded };
     });
-    return { vehicle: this.vehicle.state, unit: this.unit.state, profile: this.profile,
+    return { vehicle: this.vehicle.state, unit: this.unit.state, profile: this.profile, mosfet: this.mosfet.snapshot(),
       paused: this.paused, capturePaused: this.capturePaused, pedals: this.pedals,
       between: this.between, mode: this.unit.config.mode,
       count: this.received, retained: this.frames.length, rows, history: this.history,
@@ -194,7 +210,8 @@ export class DesktopController {
       case 'mode': this.unit.configure({ mode: arg.mode }); this.reset(); break;
       case 'serial': this.serial(arg.text); break;
       case 'serialIdle': this.flushSerial(); break;
-      case 'serialReset': this.flushSerial('disconnect'); this.uart = new TulSerialParser(); break;
+      case 'serialReset': this.flushSerial('disconnect'); this.uart = new TulSerialParser(); this.lastCanActivityMs = null; this.mosfet.disconnect(); break;
+      case 'mosfetReset': this.mosfet.reset(); break;
       case 'slcan': {
         const f = parseSlcanLine(arg.text);
         if (f) this.record({ ...f, timestamp: Date.now() / 1000, timestampOrigin: 'receipt-time' }, 'hardware');

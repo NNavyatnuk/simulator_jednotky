@@ -126,6 +126,60 @@ test('USB UART monitor receives idle-delimited frames at115200 without any write
   assert.equal(monitor.port, null);
 });
 
+test('USB UART forwards telemetry chunks independently of CAN frames and notifies EOF once', async () => {
+  const mock = serialMock();
+  const monitor = new TulSerialMonitor(mock.serial);
+  const chunks = [];
+  const frames = [];
+  let disconnections = 0;
+  await monitor.connect({
+    onFrame: frame => frames.push(frame),
+    onText: text => chunks.push(text),
+    onDisconnect: () => { disconnections++; },
+  });
+  mock.emit('MOSFET,1,gpio,0,0,0,');
+  mock.emit('0\nMOSFET,1,gpio,1,100000,1,0\n');
+  mock.end();
+  await new Promise(resolve => setImmediate(resolve));
+  await monitor.disconnect();
+  assert.equal(chunks.join(''), 'MOSFET,1,gpio,0,0,0,0\nMOSFET,1,gpio,1,100000,1,0\n');
+  assert.deepEqual(frames, []);
+  assert.equal(disconnections, 1);
+  assert.equal(mock.closeCalls, 1);
+});
+
+test('continuous MOSFET heartbeats do not starve short CAN reconstruction', async () => {
+  const mock = serialMock();
+  const monitor = new TulSerialMonitor(mock.serial, 40);
+  const frames = [];
+  await monitor.connect({ onFrame: frame => frames.push(frame) });
+  try {
+    mock.emit(printed(0x604, [3]));
+    for (let i = 0; i < 12; i++) {
+      mock.emit(`MOSFET,1,gpio,${i},${i * 50000},0,0\n`);
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    assert.equal(monitor.connected, true);
+    assert.equal(frames.length, 1);
+    assert.equal(frames[0].id, 0x604);
+    assert.deepEqual(frames[0].data, [3]);
+    assert.equal(frames[0].completion, 'idle');
+  } finally {
+    await monitor.disconnect();
+  }
+});
+
+test('idle CAN completion preserves a split MOSFET record and never consumes partial CAN data', () => {
+  const parser = new TulSerialParser();
+  parser.push(printed(0x604, [3]) + 'MOSFET,1,gpio,0,');
+  assert.deepEqual(parser.flush({ includePartial: false, reason: 'idle' })[0].data, [3]);
+  assert.equal(parser._buffer, 'MOSFET,1,gpio,0,');
+  parser.push('0,0,0\nID is 1540\nData byte 0 = ');
+  assert.deepEqual(parser.flush({ includePartial: false }), []);
+  parser.push('7\n');
+  assert.deepEqual(parser.flush()[0].data, [7]);
+});
+
 test('USB UART idle timer cannot consume a split byte; EOF flushes the last complete diagnostic line', async () => {
   const mock = serialMock();
   const monitor = new TulSerialMonitor(mock.serial, 10);

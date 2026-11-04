@@ -102,7 +102,7 @@ Window::Window() {
     connection_ = new QLabel("Nepřipojeno · 115200 baud, 8N1"); connection_->setObjectName("connectionStatus");
     connection_->setTextFormat(Qt::PlainText);
     connection_->setWordWrap(true); hw->addWidget(connection_); layout->addWidget(hardware);
-    auto* tabs = new QTabWidget; layout->addWidget(tabs, 1);
+    auto* tabs = new QTabWidget; tabs->setObjectName("mainTabs"); layout->addWidget(tabs, 1);
     auto* dashboard = new QWidget;
     auto* dash = new QVBoxLayout(dashboard);
     auto* values = new QHBoxLayout;
@@ -163,6 +163,34 @@ Window::Window() {
     auto* defaultProfile = button("Obnovit profil TUL", profiles); mon->addLayout(profiles);
     auto* provenance = new QLabel("UART RX* = rekonstrukce debug textu; DLC je odvozené, čas je přijetí na PC.\nSOUBOR = import; rozhraní v souboru samo nepotvrzuje původ. Záznam uchovává 5000 rámců, tabulka posledních 200 dle filtru.");
     provenance->setWordWrap(true); mon->addWidget(provenance); tabs->addTab(monitor, "CAN monitor");
+
+    auto* mosfet = new QWidget; auto* mos = new QVBoxLayout(mosfet);
+    auto* mosfetHelp = new QLabel("Živá kontrola FET1/FET2 přes USB jednotky · debug UART, 115200 baud.\n"
+        "Firmware musí posílat telemetrii MOSFET; původní CAN výpis stav výstupů neobsahuje. "
+        "Aplikace pouze čte a neposílá spínací příkazy.\n"
+        "Kontroluje souběh obou výstupů, návrat do vypnuto a impulzy 100 / 50 ms s tolerancí ±10 ms. "
+        "Pozastavení simulace ani záznamu tuto kontrolu nezastaví.");
+    mosfetHelp->setWordWrap(true); mos->addWidget(mosfetHelp);
+    mosfetStatus_ = new QLabel; mosfetStatus_->setObjectName("mosfetStatus");
+    mosfetStatus_->setTextFormat(Qt::PlainText); mosfetStatus_->setWordWrap(true);
+    auto mosfetFont = mosfetStatus_->font(); mosfetFont.setBold(true); mosfetFont.setPointSize(13); mosfetStatus_->setFont(mosfetFont);
+    mos->addWidget(mosfetStatus_);
+    mosfetSource_ = new QLabel; mosfetSource_->setObjectName("mosfetSource");
+    mosfetSource_->setTextFormat(Qt::PlainText); mosfetSource_->setWordWrap(true); mos->addWidget(mosfetSource_);
+    mosfetSamples_ = new QLabel; mosfetSamples_->setObjectName("mosfetSamples");
+    mosfetSamples_->setTextFormat(Qt::PlainText); mos->addWidget(mosfetSamples_);
+    mosfetChannels_ = new QTableWidget(2, 4); mosfetChannels_->setObjectName("mosfetChannels");
+    mosfetChannels_->setHorizontalHeaderLabels({"Výstup", "Poslední stav", "Dokončené impulzy", "Délky impulzů (ms)"});
+    mosfetChannels_->setEditTriggers(QAbstractItemView::NoEditTriggers); mosfetChannels_->verticalHeader()->hide();
+    mosfetChannels_->horizontalHeader()->setStretchLastSection(true); mosfetChannels_->setMaximumHeight(135);
+    mosfetChannels_->setColumnWidth(0, 80); mosfetChannels_->setColumnWidth(1, 120); mosfetChannels_->setColumnWidth(2, 150);
+    mos->addWidget(mosfetChannels_);
+    mos->addWidget(new QLabel("Zjištění od posledního resetu diagnostiky:"));
+    mosfetIssues_ = new QPlainTextEdit; mosfetIssues_->setObjectName("mosfetIssues");
+    mosfetIssues_->setReadOnly(true); mosfetIssues_->setMaximumBlockCount(64); mos->addWidget(mosfetIssues_, 1);
+    auto* mosfetButtons = new QHBoxLayout;
+    auto* mosfetReset = button("Reset diagnostiky", mosfetButtons, "mosfetReset"); mosfetButtons->addStretch(); mos->addLayout(mosfetButtons);
+    tabs->addTab(mosfet, "MOSFET výstupy");
     raw_ = new QPlainTextEdit; raw_->setObjectName("serialRaw"); raw_->setReadOnly(true); raw_->setMaximumBlockCount(1000);
     tabs->addTab(raw_, "Sériový debug výpis");
     message_ = new QLabel; message_->setObjectName("message"); message_->setTextFormat(Qt::PlainText); message_->setWordWrap(true); message_->setTextInteractionFlags(Qt::TextSelectableByMouse); layout->addWidget(message_);
@@ -176,6 +204,7 @@ Window::Window() {
     connect(reset, &QPushButton::clicked, this, [this] { releaseKeys(); execute("reset"); });
     connect(capture_, &QPushButton::clicked, this, [this] { execute("capture"); });
     connect(clear, &QPushButton::clicked, this, [this] { execute("clear"); });
+    connect(mosfetReset, &QPushButton::clicked, this, [this] { execute("mosfetReset"); });
     connect(between_, &QCheckBox::toggled, this, [this](bool b) { execute("between", {{"value", b}}); });
     connect(mode_, &QComboBox::currentIndexChanged, this, [this](int index) { releaseKeys(); execute("mode", {{"mode", index ? "firmware-parser" : "reference"}}); });
     connect(calibration, &QPushButton::clicked, this, &Window::editCalibration);
@@ -187,7 +216,13 @@ Window::Window() {
     connect(defaultProfile, &QPushButton::clicked, this, [this] { if (!serial_.isOpen()) execute("defaultProfile"); else { error_ = "Před změnou profilu odpojte port."; render(); } });
     connect(refresh_, &QPushButton::clicked, this, &Window::refreshPorts);
     connect(connect_, &QPushButton::clicked, this, [this] {
-        guard([&] { const auto p = engine_.call("exportProfile"); serial_.open(ports_->currentData().toString(), transport_->currentIndex() == 1, p["bitrate"].toInt()); });
+        guard([&] {
+            const auto p = engine_.call("exportProfile");
+            serial_.open(ports_->currentData().toString(), transport_->currentIndex() == 1, p["bitrate"].toInt());
+            // A new USB session may be another board. Reset after open's
+            // uartReset signal so a connected port waits for fresh telemetry.
+            if (serial_.isOpen()) engine_.call("mosfetReset");
+        });
     });
     connect(disconnect_, &QPushButton::clicked, &serial_, &SerialConnection::close);
     connect(&serial_, &SerialConnection::statusChanged, this, [this](const QString& text) { connection_->setText(text); render(); });
@@ -241,6 +276,38 @@ void Window::render() {
             .arg(u["lastValidGear"].toInt()).arg(qRound(u["rpm"].toDouble())).arg(static_cast<int>(std::ceil(u["cooldownMs"].toDouble())))
             .arg(u["shiftingFlag"].toInt() == 0 ? "Připraveno" : QString("uvolnění %1").arg(u["shiftingFlag"].toInt() - 1))
             .arg(s["mode"].toString() == "firmware-parser" ? "Původní parser: RPM pouze byte, požadavek 0x642." : "Letos: ECU 0x600, stupeň 0x604, volant 0x666/byte6."));
+        const auto mosfet = s["mosfet"].toObject();
+        const auto mosfetStatus = mosfet["status"].toString();
+        mosfetStatus_->setText(mosfet["summary"].toString());
+        mosfetStatus_->setStyleSheet(QString("color: %1").arg(mosfetStatus == "fail" ? "#d44b42" : mosfetStatus == "pass" ? "#23845a" : "#a07018"));
+        const auto mosfetScope = mosfet["scope"].toString();
+        mosfetSource_->setText(mosfetScope == "gpio"
+            ? "Zdroj: USB telemetrie řídicího registru GPIO. Ověřují se řídicí impulzy; napětí na pinech ani skutečné sepnutí MOSFETů na zátěži není změřeno."
+            : mosfetScope == "load"
+            ? "Zdroj: měřicí vstup deklarovaný firmwarem. Výsledek závisí na připojeném elektrickém měření a jeho polaritě."
+            : "Zdroj: žádná telemetrie výstupů. Připojte USB jednotky s podporovaným firmwarem; samotné CAN zprávy ani simulace nejsou měřením MOSFETů.");
+        mosfetSamples_->setText(QString("Přijato: %1 vzorků · poslední vzorek: %2")
+            .arg(mosfet["received"].toInt()).arg(mosfet["ageMs"].isDouble() ? QString::number(std::max(0, qRound(mosfet["ageMs"].toDouble()))) + " ms" : "—"));
+        const auto channels = mosfet["channels"].toArray();
+        for (int i = 0; i < 2; ++i) {
+            const auto channel = i < channels.size() ? channels[i].toObject() : QJsonObject{};
+            const auto level = mosfet[i == 0 ? "fet1" : "fet2"];
+            QStringList durations;
+            for (const auto duration : channel["durationsMs"].toArray()) durations << QString::number(duration.toDouble(), 'f', 1);
+            const QStringList cells{channel["name"].toString(i == 0 ? "FET1" : "FET2"),
+                level.isBool() ? (level.toBool() ? "aktivní" : "vypnuto") : "neznámý",
+                QString::number(channel["pulses"].toInt()), durations.isEmpty() ? "—" : durations.join(", ")};
+            for (int c = 0; c < cells.size(); ++c) {
+                auto* cell = mosfetChannels_->item(i, c);
+                if (!cell) { cell = new QTableWidgetItem; mosfetChannels_->setItem(i, c, cell); }
+                cell->setText(cells[c]);
+            }
+        }
+        QStringList findings;
+        for (const auto issue : mosfet["issues"].toArray()) findings << issue.toString();
+        if (findings.isEmpty()) findings << (mosfet["received"].toInt() == 0 ? "Čekám na telemetrii MOSFET z USB." : mosfetStatus == "pass" ? "Oba výstupy dokončily platný impulz; v přijaté telemetrii nebyla zjištěna chyba." : "Zatím bez zjištěných chyb. Oba výstupy musí dokončit platný impulz.");
+        const auto findingsText = findings.join('\n');
+        if (mosfetIssues_->toPlainText() != findingsText) mosfetIssues_->setPlainText(findingsText);
         for (auto it = pedals_.cbegin(); it != pedals_.cend(); ++it) {
             const QSignalBlocker block(it.value()); it.value()->setValue(qRound(s["pedals"].toObject()[it.key()].toDouble() * 100));
             pedalValues_[it.key()]->setText(QString::number(it.value()->value()) + " %");

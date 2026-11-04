@@ -6,8 +6,10 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QLineEdit>
+#include <QLabel>
 #include <QPushButton>
 #include <QSlider>
+#include <QTabWidget>
 #include <QTableWidget>
 #include <QSignalSpy>
 #include <QtTest>
@@ -17,6 +19,19 @@
 #include <cstdlib>
 #include <termios.h>
 #endif
+
+namespace {
+const char* validMosfetTelemetry =
+    "MOSFET,1,gpio,0,0,0,0\n"
+    "MOSFET,1,gpio,1,10000,1,0\n"
+    "MOSFET,1,gpio,2,60000,1,0\n"
+    "MOSFET,1,gpio,3,110000,0,0\n"
+    "MOSFET,1,gpio,4,160000,0,0\n"
+    "MOSFET,1,gpio,5,210000,0,0\n"
+    "MOSFET,1,gpio,6,260000,0,0\n"
+    "MOSFET,1,gpio,7,310000,0,1\n"
+    "MOSFET,1,gpio,8,360000,0,0\n";
+}
 
 class DesktopTests : public QObject {
     Q_OBJECT
@@ -58,6 +73,61 @@ private slots:
         const QJsonValue before = e.call("snapshot")["retained"];
         QVERIFY_EXCEPTION_THROWN(e.call("import", {{"text", "invalid CAN"}}), std::runtime_error);
         QCOMPARE(e.call("snapshot")["retained"], before);
+    }
+
+    void liveMosfetController() {
+        Engine e;
+        QCOMPARE(e.call("snapshot")["mosfet"].toObject()["status"].toString(), "waiting");
+        e.call("tick", {{"seconds", 0.25}}); e.call("tick", {{"seconds", 0.1}});
+        e.call("ignition"); e.call("request", {{"command", "up"}});
+        QVERIFY(e.call("snapshot")["unit"].toObject()["fet1"].toBool());
+        QCOMPARE(e.call("snapshot")["mosfet"].toObject()["received"].toInt(), 0); // model is never USB evidence
+        e.call("pause"); e.call("capture");
+        const QJsonValue retained = e.call("snapshot")["retained"];
+        const QString telemetry = QString::fromLatin1(validMosfetTelemetry);
+        e.call("serial", {{"text", telemetry.left(18)}});
+        QCOMPARE(e.call("snapshot")["mosfet"].toObject()["received"].toInt(), 0);
+        e.call("serial", {{"text", telemetry.mid(18)}});
+        auto mosfet = e.call("snapshot")["mosfet"].toObject();
+        QCOMPARE(mosfet["status"].toString(), "pass");
+        QCOMPARE(mosfet["scope"].toString(), "gpio");
+        QCOMPARE(mosfet["received"].toInt(), 9);
+        const auto channels = mosfet["channels"].toArray();
+        QCOMPARE(channels[0].toObject()["durationsMs"].toArray().last().toDouble(), 100.0);
+        QCOMPARE(channels[1].toObject()["durationsMs"].toArray().last().toDouble(), 50.0);
+        QCOMPARE(e.call("snapshot")["retained"], retained); // capture pause does not stop diagnostics
+        e.call("reset"); // model reset does not erase hardware evidence
+        QCOMPARE(e.call("snapshot")["mosfet"].toObject()["received"].toInt(), 9);
+        e.call("serialReset");
+        QCOMPARE(e.call("snapshot")["mosfet"].toObject()["status"].toString(), "disconnected");
+        e.call("mosfetReset");
+        QCOMPARE(e.call("snapshot")["mosfet"].toObject()["received"].toInt(), 0);
+        QCOMPARE(e.call("snapshot")["mosfet"].toObject()["status"].toString(), "waiting");
+    }
+
+    void liveMosfetWidgets() {
+        Window window; window.show();
+        auto* tabs = window.findChild<QTabWidget*>("mainTabs"); QVERIFY(tabs);
+        int diagnosticTab = -1;
+        for (int i = 0; i < tabs->count(); ++i) if (tabs->tabText(i) == "MOSFET výstupy") diagnosticTab = i;
+        QVERIFY(diagnosticTab >= 0); tabs->setCurrentIndex(diagnosticTab);
+        auto* source = window.findChild<QLabel*>("mosfetSource"); QVERIFY(source);
+        QVERIFY(source->text().contains("žádná telemetrie"));
+        window.execute("serial", {{"text", QString::fromLatin1(validMosfetTelemetry)}});
+        QCOMPARE(window.state()["mosfet"].toObject()["status"].toString(), "pass");
+        QVERIFY(source->text().contains("registru GPIO"));
+        QVERIFY(source->text().contains("není změřeno"));
+        auto* channels = window.findChild<QTableWidget*>("mosfetChannels"); QVERIFY(channels);
+        QCOMPARE(channels->item(0, 2)->text(), "1");
+        QCOMPARE(channels->item(0, 3)->text(), "100.0");
+        auto* reset = window.findChild<QPushButton*>("mosfetReset"); QVERIFY(reset);
+        QTest::mouseClick(reset, Qt::LeftButton);
+        QCOMPARE(window.state()["mosfet"].toObject()["received"].toInt(), 0);
+        QVERIFY(source->text().contains("žádná telemetrie"));
+        window.execute("serial", {{"text", "MOSFET,1,gpio,0,0,1,1\n"}});
+        QCOMPARE(window.state()["mosfet"].toObject()["status"].toString(), "fail");
+        QVERIFY(window.findChild<QLabel*>("mosfetStatus")->styleSheet().contains("#d44b42"));
+        window.close();
     }
 
     void calibrationAndProfiles() {
@@ -118,6 +188,7 @@ private slots:
         QSignalSpy parsed(&serial, &SerialConnection::uartText);
         connect(&serial, &SerialConnection::uartText, this, [&](const QString& text) { engine.call("serial", {{"text", text}}); });
         connect(&serial, &SerialConnection::uartIdle, this, [&] { engine.call("serialIdle"); });
+        connect(&serial, &SerialConnection::uartReset, this, [&] { engine.call("serialReset"); });
         serial.open(name, false, 1000000); QVERIFY(serial.isOpen());
         termios settings{}; QVERIFY(tcgetattr(master, &settings) == 0);
         QCOMPARE(cfgetispeed(&settings), B115200);
@@ -132,8 +203,30 @@ private slots:
         QCOMPARE(::write(master, sample.constData(), static_cast<size_t>(sample.size())), sample.size());
         QTRY_COMPARE(engine.call("snapshot")["retained"].toInt(), 1);
         QCOMPARE(engine.call("snapshot")["rows"].toArray().first().toObject()["decoded"].toObject()["rpm"].toInt(), 8000);
+        const QByteArray shortCan("ID is 1540\nData byte 0 = 2\n");
+        QCOMPARE(::write(master, shortCan.constData(), static_cast<size_t>(shortCan.size())), shortCan.size());
+        // Telemetry stays active faster than the serial idle timeout. The
+        // short CAN record must nevertheless become visible while connected.
+        for (int i = 0; i < 8; ++i) {
+            const auto heartbeat = QString("MOSFET,1,gpio,%1,%2,0,0\n").arg(i).arg(i * 45000).toLatin1();
+            QCOMPARE(::write(master, heartbeat.constData(), static_cast<size_t>(heartbeat.size())), heartbeat.size());
+            QTest::qWait(45);
+        }
+        QVERIFY(serial.isOpen());
+        QCOMPARE(engine.call("snapshot")["retained"].toInt(), 2);
+        const auto gearRows = engine.call("snapshot", {{"filter", "604"}})["rows"].toArray();
+        QCOMPARE(gearRows.size(), 1);
+        QCOMPARE(gearRows.first().toObject()["decoded"].toObject()["gear"].toInt(), 2);
+        engine.call("mosfetReset");
+        engine.call("pause"); engine.call("capture");
+        const QByteArray outputs(validMosfetTelemetry);
+        QCOMPARE(::write(master, outputs.constData(), static_cast<size_t>(outputs.size())), outputs.size());
+        QTRY_COMPARE(engine.call("snapshot")["mosfet"].toObject()["status"].toString(), "pass");
+        QCOMPARE(engine.call("snapshot")["mosfet"].toObject()["received"].toInt(), 9);
+        QCOMPARE(engine.call("snapshot")["retained"].toInt(), 2);
         char buffer[64]; QVERIFY(::read(master, buffer, sizeof(buffer)) <= 0); // no UART writes
         serial.close(); QVERIFY(!serial.isOpen());
+        QCOMPARE(engine.call("snapshot")["mosfet"].toObject()["status"].toString(), "disconnected");
         serial.open(name, false, 1000000); QVERIFY(serial.isOpen());
         ::close(master); QTRY_VERIFY(!serial.isOpen());
     }
