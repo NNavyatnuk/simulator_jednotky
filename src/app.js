@@ -4,11 +4,14 @@ import { SlcanMonitor } from './slcan.js';
 import { TulSerialMonitor, TulSerialParser } from './tul-serial.js';
 import { TUL_CAN_PROFILE, TUL_PROTOCOL_FACTS, makeTulRequest, makeTulGear, makeTulRpm, decodeTulFrame } from './tul-protocol.js';
 import { ShiftingUnit } from './shifting-unit.js';
+import { MosfetMonitor } from './mosfet-diagnostics.js';
 
 const $ = id => document.getElementById(id);
 const simulator = new VehicleSimulator();
 let monitor = new TulSerialMonitor();
 const unit = new ShiftingUnit();
+// Physical-device telemetry is independent of the virtual unit and CAN capture.
+const mosfets = new MosfetMonitor();
 let profile = validateProfile(TUL_CAN_PROFILE);
 let useTulDecoder = true;
 // Periods are virtual bench assumptions; the supplied unit only receives CAN.
@@ -206,7 +209,47 @@ function renderState() {
   $('unit-cooldown').textContent = `${Math.ceil(controller.cooldownMs)} ms`;
   $('unit-latch').textContent = controller.shiftingFlag ? `Uvolnění ${controller.shiftingFlag - 1}/${unit.config.rearmZeroFrames}` : 'Připraveno';
   $('unit-rpm').textContent = `${Math.round(controller.rpm).toLocaleString('cs-CZ')} ${unit.config.mode === 'firmware-parser' ? '(byte RPM)' : 'rpm modelu'}`;
+  renderMosfets();
 }
+
+function renderMosfets() {
+  const state = mosfets.snapshot();
+  const labels = { waiting: 'Čekám na telemetrii', monitoring: 'Probíhá kontrola', pass: 'Zachycené impulzy vyhovují', fail: 'Zjištěna chyba', inconclusive: 'Neúplná kontrola', stale: 'Telemetrie se odmlčela', disconnected: 'Odpojeno' };
+  $('mosfet-status').textContent = labels[state.status];
+  $('mosfet-status').dataset.status = state.status;
+  $('mosfet-summary').textContent = state.summary;
+  $('mosfet-scope').textContent = state.scope === 'gpio' ? 'USB · řídicí registr GPIO' : state.scope === 'load' ? 'USB · měřicí vstup deklarovaný firmwarem' : 'USB · bez dat o výstupech';
+  $('mosfet-age').textContent = state.ageMs === null ? 'Žádný vzorek' : `Poslední vzorek před ${Math.round(state.ageMs)} ms · přijato ${state.received}`;
+  const live = !['waiting', 'stale', 'disconnected'].includes(state.status);
+  for (const [i, key] of ['fet1', 'fet2'].entries()) {
+    const active = live ? state[key] : null;
+    const element = $('mosfet-' + key);
+    element.textContent = active === null ? 'Neznámý' : active ? 'ZAPNUTO' : 'Vypnuto';
+    element.classList.toggle('energized', active === true);
+    const channel = state.channels[i];
+    const last = channel.durationsMs.at(-1);
+    $('mosfet-' + key + '-pulses').textContent = `${channel.pulses} dokončených impulzů · poslední ${last === undefined ? '—' : Number(last.toFixed(2)) + ' ms'}`;
+  }
+  const fragment = document.createDocumentFragment();
+  for (const check of state.checks) {
+    const item = document.createElement('li');
+    item.textContent = `${check.passed === true ? '✓' : check.passed === false ? '✕' : '—'} ${check.name}: ${check.detail}`;
+    item.classList.toggle('is-error', check.passed === false);
+    fragment.append(item);
+  }
+  for (const issue of state.issues) {
+    const item = document.createElement('li');
+    item.textContent = issue;
+    fragment.append(item);
+  }
+  $('mosfet-checks').replaceChildren(fragment);
+}
+
+$('mosfet-reset-btn').addEventListener('click', () => { mosfets.reset(); renderMosfets(); });
+$('mosfet-export-btn').addEventListener('click', () => download('mosfet-diagnostika.json', JSON.stringify({
+  exportedAt: new Date().toISOString(), diagnostic: mosfets.snapshot(),
+  note: 'GPIO je řídicí registr; elektrické sepnutí MOSFETu na zátěži tím není změřeno.',
+}, null, 2), 'application/json'));
 
 function renderLog() {
   const filter = $('filter-input').value.trim().toLowerCase().replace(/^0x/, '');
@@ -335,6 +378,8 @@ $('import-log-input').addEventListener('change', async event => {
 $('connect-btn').addEventListener('click', async () => {
   connecting = true;
   const uart = $('transport-select').value === 'tul-uart';
+  mosfets.reset();
+  if (!uart) mosfets.disconnect();
   monitor = uart ? new TulSerialMonitor() : new SlcanMonitor();
   $('hardware-status').textContent = uart ? 'Čekám na USB port řadicí jednotky…' : 'Čekám na adaptér a potvrzení režimu listen-only…';
   renderState();
@@ -342,10 +387,13 @@ $('connect-btn').addEventListener('click', async () => {
     await monitor.connect({
       bitrate: profile.bitrate,
       onFrame: frame => pushFrame({ ...frame, timestamp: Date.now() / 1000, timestampOrigin: 'receipt-time', direction: 'rx', interfaceName: uart ? 'uart0' : 'can0' }, uart ? 'uart' : 'hardware'),
+      onText: text => mosfets.push(text),
+      onDisconnect: () => { mosfets.disconnect(); renderMosfets(); },
       onStatus: text => { $('hardware-status').textContent = text; renderState(); },
     });
     message(uart ? 'USB jednotky připojeno: pouze čtu debug výpis. DLC je odvozené (*), nejde o bezeztrátový CAN záznam.' : 'CAN adaptér připojen v režimu pouze pro příjem.');
   } catch (error) {
+    mosfets.disconnect();
     $('hardware-status').textContent = 'Nepřipojeno';
     message(error.message, true);
   } finally { connecting = false; renderState(); }

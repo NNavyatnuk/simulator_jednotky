@@ -36,6 +36,8 @@ Záložka **Simulace** nabízí otáčky, rychlost, stupeň, teplotu, pedály, s
 
 Panel jednotky ukazuje FET1/FET2, vstupní RPM, prodlevu a odjištění. Lze přepnout původní parser pro diagnostiku jeho rozporů a vynutit čidlo „mezi stupni (7)“. Příkazy 1/2/0x40 a maska 0x43 zůstávají neověřeným předpokladem; fyzika a ideální pneumatika jsou model. Žádný virtuální pulz neovládá fyzický ventil.
 
+Samostatná záložka **MOSFET výstupy** kontroluje živou USB telemetrii výstupů nezávisle na simulaci. Ukazuje zachycené délky impulzů, stavy obou kanálů a chyby souběhu, časování nebo neúplného přenosu. Vyžaduje doplnění telemetrie do firmwaru; běžný CAN debug výpis ji nenahrazuje. Viz [živá diagnostika MOSFETů](mosfet-diagnostics.md), včetně rozdílu mezi řídicím registrem GPIO a elektricky změřeným výstupem.
+
 **Model / kalibrace** je nativní JSON editor všech původních parametrů vozidla, převodů, časů a limitů jednotky i CAN profilu. Import/export používá stejnou kalibraci schemaVersion 1 jako webová varianta. Všechny části se ověří před použitím. `shiftingUnit.ratios[1..6]` musí odpovídat `vehicle.gearRatios`; pomocný poměr N je `500 * gearRatios[0] / rpmLowerLimit`. Během editace stojí virtuální čas, sériový příjem pokračuje. Před změnou kalibrace/profilu odpojte port. Pro uchování konfiguraci exportujte.
 
 **CAN monitor** uchovává 5000 rámců a zobrazuje posledních 200 odpovídajících ID/datovému a směrovému filtru. Nabízí samostatnou pauzu záznamu, vymazání, import Classical CAN candump a UART textu, export candump/úplných JSON metadat, vlastní byteový profil a obnovení TUL profilu. Ruční import funguje i při pozastaveném záznamu. Reset vozu nemaže záznam. Virtuální sběrnice má periodu 50 ms; rámce se do adaptéru neposílají.

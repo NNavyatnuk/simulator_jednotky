@@ -15,7 +15,7 @@ int Engine::interrupt(JSRuntime*, void* opaque) {
 
 JSModuleDef* Engine::load(JSContext* context, const char* name, void*) {
     const auto path = QDir::cleanPath(QString::fromUtf8(name));
-    static const QStringList allowed = { "src/simulator.js", "src/shifting-unit.js", "src/tul-protocol.js", "src/tul-serial.js", "src/can.js" };
+    static const QStringList allowed = { "src/simulator.js", "src/shifting-unit.js", "src/mosfet-diagnostics.js", "src/tul-protocol.js", "src/tul-serial.js", "src/can.js" };
     if (!allowed.contains(path)) {
         JS_ThrowReferenceError(context, "Module not bundled: %s", name);
         return nullptr;

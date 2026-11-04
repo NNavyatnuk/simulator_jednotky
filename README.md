@@ -18,6 +18,12 @@ ctest --preset windows-release
 
 USB debug port se otevírá nativně na **115200 baud / 8N1, pouze čtení**. Záznam není bezeztrátový CAN capture: DLC je odvozené a skutečný CAN timestamp chybí. Aplikace nic neflashuje a neovládá skutečné ventily.
 
+## Živá kontrola spínacích výstupů MOSFET
+
+Panel **MOSFET výstupy** v desktopové i webové aplikaci sleduje přes USB stavy FET1/FET2, délky impulzů (100/50 ms ±10 ms), jejich dokončení a zakázaný souběh. Hlídá ztracené zprávy, restart časové základny i odmlčení telemetrie. Simulace a pozastavení CAN záznamu výsledek neovlivňují.
+
+Původní firmware stavy výstupů nevypisuje. Pro živou kontrolu je připraven pasivní doplněk v [reference/mosfet-monitor](reference/mosfet-monitor/) a [postup jeho zapojení do firmwaru](docs/mosfet-diagnostics.md). Doplněk čte řídicí registr GPIO a nic nespíná. **Řídicí impulzy nejsou měřením elektrické funkce MOSFETu na zátěži**; k tomu je nutný samostatný měřicí vstup. Bez telemetrie panel úspěšnou kontrolu nehlásí.
+
 ## Volitelná původní webová varianta
 
 Vyžaduje Node.js 24+ (testovaná verze v `.node-version`).

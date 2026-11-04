@@ -58,8 +58,8 @@
             <div class="panel-heading"><div class="section-label"><span class="section-index">03</span><h2 id="unit-title">Řadicí jednotka · TUL Racing</h2></div><span class="unit-hardware-tag">ESP32-PICO-V3</span></div>
             <div class="unit-topbar"><label class="unit-mode-label" for="unit-mode">REŽIM LOGIKY<select id="unit-mode"><option value="reference" selected>Letos · mapování z ECU + model logiky</option><option value="firmware-parser">Původní firmware · diagnostika rozporů</option></select></label><button id="neutral-btn" class="button button-secondary neutral-button" type="button">Neutrál <kbd>N</kbd></button></div>
             <div class="unit-signals" aria-label="Stavy řadicí jednotky">
-              <div class="unit-signal unit-output"><span>VÝSTUP FET 1</span><strong id="unit-fet1" class="fet-state">Vypnuto</strong><small>Solenoidový ventil 1</small></div>
-              <div class="unit-signal unit-output"><span>VÝSTUP FET 2</span><strong id="unit-fet2" class="fet-state">Vypnuto</strong><small>Solenoidový ventil 2</small></div>
+              <div class="unit-signal unit-output"><span>MODEL FET 1</span><strong id="unit-fet1" class="fet-state">Vypnuto</strong><small>Simulovaný ventil 1</small></div>
+              <div class="unit-signal unit-output"><span>MODEL FET 2</span><strong id="unit-fet2" class="fet-state">Vypnuto</strong><small>Simulovaný ventil 2</small></div>
               <div class="unit-signal"><span>POSLEDNÍ STUPEŇ</span><strong id="unit-lastgear">N</strong><small>Uložený stav čidla</small></div>
               <div class="unit-signal"><span>PRODLEVA ŘAZENÍ</span><strong id="unit-cooldown">0 ms</strong><small>Zbývající čas blokace</small></div>
               <div class="unit-signal"><span>PÁDLO / UVOLNĚNÍ</span><strong id="unit-latch">Připraveno</strong><small>Podmínka dalšího požadavku</small></div>
@@ -71,6 +71,23 @@
 
           <section class="panel telemetry" aria-labelledby="telemetry-title"><div class="panel-heading"><div class="section-label"><span class="section-index">04</span><h2 id="telemetry-title">Živá telemetrie</h2></div><div class="chart-legend"><span><i class="legend-rpm"></i>Otáčky</span><span><i class="legend-speed"></i>Rychlost</span><span class="chart-window">POSLEDNÍCH 30 S</span></div></div><div class="chart-container"><canvas id="telemetry-chart" width="1000" height="190" role="img" aria-label="Průběh otáček motoru a rychlosti za posledních 30 sekund">Průběžné hodnoty jsou uvedeny v přístrojové desce nad grafem.</canvas></div></section>
         </div>
+
+        <section class="panel mosfet-panel" id="mosfet-monitor" aria-labelledby="mosfet-title">
+          <div class="panel-heading"><div class="section-label"><h2 id="mosfet-title">MOSFET výstupy · živá kontrola USB</h2></div><span id="mosfet-status" role="status">Čekám na telemetrii</span></div>
+          <div class="mosfet-content">
+            <p id="mosfet-scope">USB · bez dat o výstupech</p>
+            <p id="mosfet-summary">Připojte USB jednotky s telemetrií MOSFET.</p>
+            <div class="mosfet-channels">
+              <div><h3>FET1</h3><strong id="mosfet-fet1" class="fet-state">Neznámý</strong><p id="mosfet-fet1-pulses">0 dokončených impulzů · poslední —</p></div>
+              <div><h3>FET2</h3><strong id="mosfet-fet2" class="fet-state">Neznámý</strong><p id="mosfet-fet2-pulses">0 dokončených impulzů · poslední —</p></div>
+            </div>
+            <p>Kontrola: pulz 100 ms nebo 50 ms ±10 ms, souběžné sepnutí a návrat do vypnutého stavu. Oba výstupy je nutné zachytit samostatně.</p>
+            <ul id="mosfet-checks" aria-label="Výsledky kontroly výstupů"></ul>
+            <p id="mosfet-age">Žádný vzorek</p>
+            <div class="settings-actions"><a class="button button-secondary" href="#configuration">Připojení USB</a><button id="mosfet-reset-btn" type="button" class="button button-secondary">Nová kontrola</button><button id="mosfet-export-btn" type="button" class="button button-secondary">Export výsledku JSON</button></div>
+            <details class="mosfet-help"><summary>Co je potřeba pro živou kontrolu?</summary><p>Ve firmwaru jednotky musí běžet telemetrie MOSFET. Původní USB výpis obsahuje jen CAN zprávy; z nich se stav výstupů neurčuje. Připravený doplněk a postup jsou v projektu v <code>reference/mosfet-monitor/</code> a <code>docs/mosfet-diagnostics.md</code>. Aplikace jednotku sama neprogramuje a přes USB neposílá spínací příkazy.</p><p>Telemetrie GPIO čte řídicí registr procesoru, nikoli napětí nebo proud zátěže. Elektrické sepnutí MOSFETu potvrdí až odpovídající měřicí vstup. Vzorkování po 1 ms nemusí zachytit kratší poruchy. Simulace, CAN import ani pozastavení záznamu tuto kontrolu neovládají.</p></details>
+          </div>
+        </section>
 
         <section class="panel can-monitor" id="can-monitor" aria-labelledby="can-title"><div class="panel-heading can-heading"><div class="section-label"><span class="section-index">05</span><h2 id="can-title">CAN monitor</h2><span class="frame-counter"><span id="can-count">0</span> rámců</span></div><div class="capture-indicator"><span class="live-dot"></span><span id="capture-status">Záznam aktivní</span><button id="monitor-paused-btn" class="button button-small button-secondary" type="button">Pozastavit záznam</button></div></div>
           <div class="monitor-toolbar"><div class="monitor-filters"><label class="search-box" for="filter-input"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13 13 4 4"/></svg><input id="filter-input" type="search" placeholder="Filtrovat ID nebo data…" aria-label="Filtrovat CAN rámce podle ID nebo dat" /></label><select id="direction-filter" aria-label="Filtrovat směr CAN rámců"><option value="all">Všechny směry</option><option value="tx">TX · simulace</option><option value="rx">RX · příjem</option></select></div><div class="monitor-actions"><label class="button button-small button-secondary file-button" for="import-log-input"><span aria-hidden="true">↥</span> Import<input type="file" id="import-log-input" accept=".log,.txt,.candump,text/plain" /></label><button id="export-log-btn" class="button button-small button-secondary" type="button"><span aria-hidden="true">↧</span> CAN log</button><button id="export-json-btn" class="button button-small button-secondary" type="button">JSON</button><button id="clear-log-btn" class="button button-small button-plain" type="button">Vymazat</button></div></div>
